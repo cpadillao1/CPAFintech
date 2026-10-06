@@ -67,7 +67,8 @@ public class AccountHoldService {
      * Consulta de bloqueos activos para el Frontend.
      */
     @Transactional(readOnly = true)
-    public Page<AccountHoldDTO> getActiveHoldsByAccountNumber(String accountNumber, Pageable pageable) {
+    public Page<AccountHoldDTO> getActiveHoldsByAccountNumber(String accountNumber,
+                                                              Pageable pageable) {
         //Long statusActive = catalogService.getDetailIdByCode("HOLD_STATUS", "ACTIVE");
         //Page<AccountHoldEntity> entities = holdRepository.findActiveHoldsByAccountNumber(accountNumber, statusActive, pageable);
         Page<AccountHoldEntity> entities = holdRepository.findActiveHoldsByAccountNumber(accountNumber, pageable);
@@ -101,7 +102,9 @@ public class AccountHoldService {
      * Levanta un bloqueo de forma MANUAL (Invocado por el Controller/FE).
      */
     @Transactional
-    public void releaseHoldManual(Long holdId, String observations, String currentUser) {
+    public void releaseHoldManual(Long holdId,
+                                  String observations,
+                                  String currentUser) {
         Long releaseTypeManual = catalogService.getDetailIdByCode("HOLD_RELEASE", "MANUAL");
         Long statusReleased = catalogService.getDetailIdByCode("HOLD_STATUS", "RELEASED");
 
@@ -125,7 +128,11 @@ public class AccountHoldService {
      * MOTOR DE LIBERACIÓN CENTRALIZADO (Privado)
      * Garantiza que el dinero regrese al disponible correctamente en ambos casos.
      */
-    private void executeReleaseProcess(Long holdId, Long targetStatus, Long releaseType, String obs, String user) {
+    private void executeReleaseProcess(Long holdId,
+                                       Long targetStatus,
+                                       Long releaseType,
+                                       String obs,
+                                       String user) {
         AccountHoldEntity hold = holdRepository.findById(holdId)
                 .orElseThrow(() -> new RuntimeException("Hold record not found: " + holdId));
 
