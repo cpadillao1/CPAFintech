@@ -47,7 +47,7 @@ public class UserService {
 
         //  Validar unicidad del email (Regla de Oro en Fintech)
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("El correo electrónico " + request.getEmail() + " ya está registrado.");
+            throw new BusinessRuleException("El correo electrónico " + request.getEmail() + " ya está registrado.", HttpStatus.BAD_REQUEST);
         }
         //  Generar el LOGIN (Regla: primera letra de firstName + lastName en minúsculas)
         String generatedLogin = generateLogin(request.getFirstName(), request.getLastName());
@@ -57,7 +57,7 @@ public class UserService {
 
         //  Buscar sucursal
         BranchEntity branch = branchRepository.findByCode(request.getBranchCode())
-                .orElseThrow(() -> new RuntimeException("Sucursal no encontrada: " + request.getBranchCode()));
+                .orElseThrow(() -> new BusinessRuleException("Branch not found: " + request.getBranchCode(), HttpStatus.NOT_FOUND));
 
         //  Buscamos el objeto RoleEntity "USER" en la BD
         //RoleEntity defaultRole = roleRepository.findByName("ADMIN") // Cambia "USER" por "ADMIN"
@@ -76,13 +76,13 @@ public class UserService {
         if (request.getRoleNames() != null && !request.getRoleNames().isEmpty()) {
             for (String roleName : request.getRoleNames()) {
                 RoleEntity role = roleRepository.findByName(roleName)
-                        .orElseThrow(() -> new RuntimeException("El rol " + roleName + " no existe."));
+                        .orElseThrow(() -> new BusinessRuleException("El rol " + roleName + " no existe.", HttpStatus.NOT_FOUND));
                 userEntity.getRoles().add(role);
             }
         } else {
             // Opcional: Si no envían roles, asignar "USER" por defecto
             RoleEntity defaultRole = roleRepository.findByName("USER")
-                    .orElseThrow(() -> new RuntimeException("Rol por defecto no encontrado"));
+                    .orElseThrow(() -> new BusinessRuleException("Rol por defecto no encontrado", HttpStatus.NOT_FOUND));
             userEntity.getRoles().add(defaultRole);
         }
 
@@ -96,7 +96,7 @@ public class UserService {
     public UserDTO getUserByLogin(String login) {
         return userRepository.findByLogin(login)
                 .map(userMapper::toDto)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new BusinessRuleException("User not found", HttpStatus.NOT_FOUND));
     }
 
 
@@ -105,16 +105,16 @@ public class UserService {
     @Transactional
     public UserDTO updateUser(UUID id, UserRegistrationRequest request) {
         UserEntity user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new BusinessRuleException("Usuario no encontrado", HttpStatus.NOT_FOUND));
 
         // Validaciones manuales básicas
-        if (request.getFirstName() == null || request.getFirstName().isBlank()) throw new RuntimeException("El nombre es obligatorio");
-        if (request.getLastName() == null || request.getLastName().isBlank()) throw new RuntimeException("El apellido es obligatorio");
-        if (request.getEmail() == null || request.getEmail().isBlank()) throw new RuntimeException("El email es obligatorio");
+        if (request.getFirstName() == null || request.getFirstName().isBlank()) throw new BusinessRuleException("El nombre es obligatorio", HttpStatus.BAD_REQUEST);
+        if (request.getLastName() == null || request.getLastName().isBlank()) throw new BusinessRuleException("El apellido es obligatorio", HttpStatus.BAD_REQUEST);
+        if (request.getEmail() == null || request.getEmail().isBlank()) throw new BusinessRuleException("El email es obligatorio", HttpStatus.BAD_REQUEST);
 
         // Validar si el email ya existe en otro usuario
         if (!user.getEmail().equals(request.getEmail()) && userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("El correo electrónico ya está registrado.");
+            throw new BusinessRuleException("El correo electrónico ya está registrado.", HttpStatus.BAD_REQUEST);
         }
 
         user.setFirstName(request.getFirstName());
@@ -124,25 +124,24 @@ public class UserService {
         // 🔐 PASSWORD OPCIONAL: Solo si el admin escribió algo
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             if (request.getPassword().length() < 8) {
-                throw new RuntimeException("La nueva contraseña debe tener al menos 8 caracteres.");
+                throw new BusinessRuleException("La nueva contraseña debe tener al menos 8 caracteres.", HttpStatus.BAD_REQUEST);
             }
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
 
         if (request.getBranchCode() != null) {
             BranchEntity branch = branchRepository.findByCode(request.getBranchCode())
-                    .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
+                    .orElseThrow(() -> new BusinessRuleException("Sucursal no encontrada", HttpStatus.NOT_FOUND));
             user.setBranch(branch);
         }
 
         return userMapper.toDto(userRepository.save(user));
     }
 
-
     // Metodo auxiliar para la lógica del login
     private String generateLogin(String firstName, String lastName) {
         if (firstName == null || firstName.isEmpty() || lastName == null || lastName.isEmpty()) {
-            throw new RuntimeException("Nombre y apellido son necesarios para generar el login");
+            throw new BusinessRuleException("Nombre y apellido son necesarios para generar el login", HttpStatus.BAD_REQUEST);
         }
 
         String rawLogin = firstName.charAt(0) + lastName;
@@ -168,18 +167,19 @@ public class UserService {
 
     @Audit(action = "LOGIN", module = "AUTH")
     public LoginResponse login(LoginRequest request) {
-        // 1. Validate credentials, branch and status Active
-        UserEntity user = userRepository.findByLoginAndBranchIdAndActiveTrue(request.getLogin(), request.getBranchId())
-                .orElseThrow(() -> new BusinessRuleException("Incorrect credentials or the user does not have access to this branch.", HttpStatus.BAD_REQUEST));
-
-        // 2. Verify password
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessRuleException("Invalid credentials.", HttpStatus.BAD_REQUEST);
-        }
-
         // Get business date and system status
         ControlSystemEntity system = controlSystemRepository.findById(1)
                 .orElseThrow(() -> new BadCredentialsException("Critical error: System configuration not found"));
+
+
+        // 1. Validate credentials, branch and status Active
+        UserEntity user = userRepository.findByLoginAndBranchIdAndActiveTrue(request.login(), request.branchId())
+                .orElseThrow(() -> new BusinessRuleException("Incorrect credentials or the user does not have access to this branch.", HttpStatus.BAD_REQUEST));
+
+        // 2. Verify password
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            throw new BusinessRuleException("Invalid credentials.", HttpStatus.UNAUTHORIZED);
+        }
 
         // 3. RECOLECCIÓN DE CÓDIGOS (Jerarquía completa para el TreeView)
         List<String> authorities = user.getRoles().stream()
@@ -207,6 +207,5 @@ public class UserService {
                 .systemStatus(system.getStatus())
                 .build();
     }
-
 
 }

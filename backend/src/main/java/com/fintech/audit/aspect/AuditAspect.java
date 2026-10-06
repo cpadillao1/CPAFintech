@@ -47,7 +47,7 @@ public class AuditAspect {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         if ("anonymousUser".equals(username) && "AUTH".equals(audit.module())) {
             for (Object arg : joinPoint.getArgs()) {
-                if (arg instanceof LoginRequest loginReq) return loginReq.getLogin();
+                if (arg instanceof LoginRequest loginReq) return loginReq.login();
             }
         }
         return username;

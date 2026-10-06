@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,7 +22,10 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     //  Private method para reutilizar la estructura del JSON
-    private ResponseEntity<Map<String, Object>> buildErrorResponse(HttpStatus status, String error, String message, String path) {
+    private ResponseEntity<Map<String, Object>> buildErrorResponse(HttpStatus status,
+                                                                   String error,
+                                                                   String message,
+                                                                   String path) {
         Map<String, Object> body = new HashMap<>();
         body.put("timestamp", LocalDateTime.now().toString());
         body.put("status", status.value());
@@ -33,30 +37,56 @@ public class GlobalExceptionHandler {
 
     //  Errores de Credenciales (Login Fallido)
     @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex, HttpServletRequest request) {
-        return buildErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", "Incorrect username or password", request.getServletPath());
+    public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex,
+                                                                    HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.UNAUTHORIZED,
+                "Unauthorized",
+                "Incorrect username or password",
+                request.getServletPath());
     }
 
     //  Errores de Validación (@Valid) - Unificamos la lista de errores en el campo 'message'
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex,
+                                                                          HttpServletRequest request) {
         String details = ex.getBindingResult().getFieldErrors().stream()
+                // Ordenamos para priorizar los errores de campos vacíos/obligatorios al inicio
+                .sorted(Comparator.comparing(error -> {
+                    String code = error.getCode();
+                    // Si es NotBlank, NotNull o NotEmpty, les damos prioridad (valor 0)
+                    if ("NotBlank".equals(code) || "NotNull".equals(code) || "NotEmpty".equals(code)) {
+                        return 0;
+                    }
+                    // Cualquier otro error va después (valor 1)
+                    return 1;
+                }))
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
 
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation Error", details, request.getServletPath());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST,
+                "Validation Error",
+                details,
+                request.getServletPath());
     }
 
     //  Acceso Denegado (403 Forbidden - Falta de Roles)
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
-        return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "No tienes permisos suficientes para realizar esta acción.", request.getServletPath());
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex,
+                                                                  HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN,
+                "Forbidden",
+                "No tienes permisos suficientes para realizar esta acción.",
+                request.getServletPath());
     }
 
     //  Manejo de Recursos No Encontrados (404)
     @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleEntityNotFound(EntityNotFoundException ex, HttpServletRequest request) {
-        return buildErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), request.getServletPath());
+    public ResponseEntity<Map<String, Object>> handleEntityNotFound(EntityNotFoundException ex,
+                                                                    HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND,
+                "Not Found",
+                ex.getMessage(),
+                request.getServletPath());
     }
 
     //  Duplicados en Base de Datos (Integridad)
