@@ -81,7 +81,9 @@ public class AccountServiceImpl implements AccountService {
         return accountMapper.toResponse(savedAccount);
     }
 
-    private void processAndLinkHolders(AccountEntity account, List<AccountCreateRequestDTO.AccountHolderRequestDTO> holdersDto, String user) {
+    private void processAndLinkHolders(AccountEntity account,
+                                       List<AccountCreateRequestDTO.AccountHolderRequestDTO> holdersDto,
+                                       String user) {
         Long activeStatus = catalogService.getDetailIdByCode("ACCOUNT_STATUS", "ACTIVE");
 
         holdersDto.forEach(dto -> {
@@ -111,7 +113,9 @@ public class AccountServiceImpl implements AccountService {
     @PreAuthorize("hasAuthority('ACCO_QUERY')")
     @Audit(action = "ACCO_QUERY", module = "ACCOUNTS")
     @Transactional(readOnly = true)
-    public List<AccountSearchDTO> searchAccounts(Integer productId, Integer subproductId, String accountNumber) {
+    public List<AccountSearchDTO> searchAccounts(Integer productId,
+                                                 Integer subproductId,
+                                                 String accountNumber) {
         List<AccountEntity> accounts = accountRepository.findByHierarchy(productId, subproductId, accountNumber);
 
         // Validamos si la lista está vacía
